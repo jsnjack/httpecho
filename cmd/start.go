@@ -21,6 +21,7 @@ import (
 	"math/rand"
 	"net/http"
 	"os"
+	"strconv"
 	"time"
 
 	"github.com/spf13/cobra"
@@ -56,6 +57,22 @@ func requestHandle(w http.ResponseWriter, r *http.Request) {
 	startTime := time.Now()
 	logID := GenerateRandomString(5)
 	logger := log.New(os.Stdout, "["+logID+"] ", log.Lmicroseconds)
+
+	// Handle special flags
+
+	// Status code
+	statusStr := r.FormValue("status")
+	status, err := strconv.Atoi(statusStr)
+	if err == nil {
+		w.WriteHeader(status)
+	}
+
+	// Delay response
+	sleepStr := r.FormValue("sleep")
+	sleep, err := time.ParseDuration(sleepStr)
+	if err == nil {
+		time.Sleep(sleep)
+	}
 
 	// Add all request headers to response body
 	w.Header().Set("Content-Type", "text/plain")
