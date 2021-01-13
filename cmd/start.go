@@ -22,6 +22,7 @@ import (
 	"net/http"
 	"os"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/spf13/cobra"
@@ -55,7 +56,7 @@ func init() {
 
 func requestHandle(w http.ResponseWriter, r *http.Request) {
 	startTime := time.Now()
-	logID := GenerateRandomString(5)
+	logID := generateRandomString(5)
 	logger := log.New(os.Stdout, "["+logID+"] ", log.Lmicroseconds)
 
 	// Handle special flags
@@ -77,7 +78,7 @@ func requestHandle(w http.ResponseWriter, r *http.Request) {
 	// Add all request headers to response body
 	w.Header().Set("Content-Type", "text/plain")
 	for k, v := range r.Header {
-		w.Write([]byte(fmt.Sprintf("%s: %s\n", k, v)))
+		w.Write([]byte(fmt.Sprintf("%s: %s\n", k, strings.Join(v, ","))))
 	}
 
 	defer func() {
@@ -89,7 +90,7 @@ func requestHandle(w http.ResponseWriter, r *http.Request) {
 const letterBytes = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ"
 
 // GenerateRandomString generates random string of requested length
-func GenerateRandomString(n int) string {
+func generateRandomString(n int) string {
 	b := make([]byte, n)
 	for i := range b {
 		b[i] = letterBytes[rand.Intn(len(letterBytes))]
