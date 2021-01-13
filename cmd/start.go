@@ -56,6 +56,13 @@ func requestHandle(w http.ResponseWriter, r *http.Request) {
 	startTime := time.Now()
 	logID := GenerateRandomString(5)
 	logger := log.New(os.Stdout, "["+logID+"] ", log.Lmicroseconds)
+
+	// Add all request headers to response body
+	w.Header().Set("Content-Type", "text/plain")
+	for k, v := range r.Header {
+		w.Write([]byte(fmt.Sprintf("%s: %s\n", k, v)))
+	}
+
 	defer func() {
 		duration := time.Now().Sub(startTime)
 		logger.Printf("%s %s [took %s]\n", r.Method, r.URL, duration)
