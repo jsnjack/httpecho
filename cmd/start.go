@@ -34,6 +34,10 @@ var startPort int
 var startCmd = &cobra.Command{
 	Use:   "start",
 	Short: "Start HTTP echo server",
+	Long: `List of query parameters to adjust a response behaviour:
+    sleep - delay response for specified duration. Valid time units are "ns", "us" (or "µs"), "ms", "s", "m", "h".
+    status - return the response with specified status code
+`,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		cmd.SilenceErrors = true
 		cmd.SilenceUsage = true
@@ -43,7 +47,7 @@ var startCmd = &cobra.Command{
 		server := &http.Server{
 			Addr: fmt.Sprintf(":%d", startPort),
 		}
-		log.Printf("Starting HTTP server on port %d...\n", startPort)
+		fmt.Printf("Starting HTTP server on port %d...\n", startPort)
 		log.Fatal(server.ListenAndServe())
 		return nil
 	},
