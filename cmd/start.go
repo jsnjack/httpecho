@@ -81,6 +81,7 @@ func requestHandle(w http.ResponseWriter, r *http.Request) {
 
 	// Add all request headers to response body
 	w.Header().Set("Content-Type", "text/plain")
+	w.Header().Set("Access-Control-Allow-Origin", "*")
 	for k, v := range r.Header {
 		w.Write([]byte(fmt.Sprintf("%s: %s\n", k, strings.Join(v, ","))))
 	}
