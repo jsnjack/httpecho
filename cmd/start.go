@@ -45,9 +45,10 @@ var startCmd = &cobra.Command{
 	Use:   "start",
 	Short: "Start HTTP echo server",
 	Long: `List of query parameters to adjust a response behaviour:
-    sleep - delay response for specified duration. Valid time units are "ns", "us" (or "µs"), "ms", "s", "m", "h".
-    status - return the response with specified status code
-	size - on top of headers, add data of specific size to response body. Supported units are "KB", "MB", "GB".
+    sleep - delay response for specified duration. Valid time units are "ns", "us" (or "µs"), "ms", "s", "m", "h" (?sleep=5s)
+    status - return the response with specified status code (?status=200)
+	size - on top of headers, add data of specific size to response body. Supported units are "KB", "MB", "GB" (?size=200KB)
+	header - add additional header to response (?header=Content-Type:text/plain)
 `,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		cmd.SilenceErrors = true
@@ -122,6 +123,21 @@ func requestHandle(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(status)
 	}
 
+	// Add extra headers
+	err = r.ParseForm()
+	if err == nil {
+		for k, v := range r.Form {
+			if k == "header" {
+				for _, h := range v {
+					headerKey, headerValue := parseHeader(h)
+					if headerKey != "" {
+						w.Header().Set(headerKey, headerValue)
+					}
+				}
+			}
+		}
+	}
+
 	// Delay response
 	sleepStr := r.FormValue("sleep")
 	sleep, err := time.ParseDuration(sleepStr)
@@ -136,6 +152,7 @@ func requestHandle(w http.ResponseWriter, r *http.Request) {
 		w.Write([]byte(fmt.Sprintf("%s: %s\n", k, strings.Join(v, ","))))
 	}
 
+	// Generate extra body content
 	sizeStr := r.FormValue("size")
 	data, err := generatePayload(sizeStr)
 	if err == nil {
@@ -273,4 +290,13 @@ func readCert(filename string) ([]byte, error) {
 		return data, nil
 	}
 	return nil, err
+}
+
+// parseHeader parses header in form of key:value
+func parseHeader(data string) (string, string) {
+	parts := strings.SplitN(data, ":", 2)
+	if len(parts) != 2 {
+		return "", ""
+	}
+	return parts[0], parts[1]
 }
