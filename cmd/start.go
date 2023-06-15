@@ -5,7 +5,7 @@ Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
 You may obtain a copy of the License at
 
-    http://www.apache.org/licenses/LICENSE-2.0
+	http://www.apache.org/licenses/LICENSE-2.0
 
 Unless required by applicable law or agreed to in writing, software
 distributed under the License is distributed on an "AS IS" BASIS,
@@ -37,6 +37,7 @@ var startCmd = &cobra.Command{
 	Long: `List of query parameters to adjust a response behaviour:
     sleep - delay response for specified duration. Valid time units are "ns", "us" (or "µs"), "ms", "s", "m", "h".
     status - return the response with specified status code
+	size - on top of headers, add data of specific size to response body. Supported units are "KB", "MB", "GB".
 `,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		cmd.SilenceErrors = true
@@ -86,8 +87,14 @@ func requestHandle(w http.ResponseWriter, r *http.Request) {
 		w.Write([]byte(fmt.Sprintf("%s: %s\n", k, strings.Join(v, ","))))
 	}
 
+	sizeStr := r.FormValue("size")
+	data, err := generatePayload(sizeStr)
+	if err == nil {
+		w.Write(data)
+	}
+
 	defer func() {
-		duration := time.Now().Sub(startTime)
+		duration := time.Since(startTime)
 		logger.Printf("%s %s [took %s]\n", r.Method, r.URL, duration)
 	}()
 }
@@ -101,4 +108,31 @@ func generateRandomString(n int) string {
 		b[i] = letterBytes[rand.Intn(len(letterBytes))]
 	}
 	return string(b)
+}
+
+func generatePayload(sizeStr string) ([]byte, error) {
+	if sizeStr == "" || len(sizeStr) < 3 {
+		return nil, fmt.Errorf("bad size")
+	}
+	size, err := strconv.ParseFloat(sizeStr[:len(sizeStr)-2], 64)
+	if err != nil {
+		return nil, err
+	}
+
+	unit := sizeStr[len(sizeStr)-2:]
+	switch unit {
+	case "KB":
+		size *= 1024
+	case "MB":
+		size *= 1024 * 1024
+	case "GB":
+		size *= 1024 * 1024 * 1024
+	}
+
+	str := ""
+	for i := 0; i < int(size); i++ {
+		str += "a"
+	}
+
+	return []byte(str), nil
 }
