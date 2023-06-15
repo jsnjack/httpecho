@@ -169,7 +169,7 @@ func generatePayload(sizeStr string) ([]byte, error) {
 	}
 
 	unit := sizeStr[len(sizeStr)-2:]
-	switch unit {
+	switch strings.ToUpper(unit) {
 	case "KB":
 		size *= 1024
 	case "MB":
@@ -178,12 +178,11 @@ func generatePayload(sizeStr string) ([]byte, error) {
 		size *= 1024 * 1024 * 1024
 	}
 
-	str := ""
-	for i := 0; i < int(size); i++ {
-		str += "a"
+	payload := make([]byte, int(size))
+	for i := range payload {
+		payload[i] = 'a'
 	}
-
-	return []byte(str), nil
+	return payload, nil
 }
 
 func extractCerts(data []byte) ([]*x509.Certificate, error) {
