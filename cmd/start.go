@@ -37,7 +37,7 @@ import (
 	"github.com/spf13/cobra"
 )
 
-var startPort int
+var bindAddr string
 var certPath string
 
 // startCmd represents the start command
@@ -45,8 +45,8 @@ var startCmd = &cobra.Command{
 	Use:   "start",
 	Short: "Start HTTP echo server",
 	Long: `List of query parameters to adjust a response behaviour:
-    sleep - delay response for specified duration. Valid time units are "ns", "us" (or "µs"), "ms", "s", "m", "h" (?sleep=5s)
-    status - return the response with specified status code (?status=200)
+	sleep - delay response for specified duration. Valid time units are "ns", "us" (or "µs"), "ms", "s", "m", "h" (?sleep=5s)
+	status - return the response with specified status code (?status=200)
 	size - on top of headers, add data of specific size to response body. Supported units are "KB", "MB", "GB" (?size=200KB)
 	header - add additional header to response (?header=Content-Type:text/plain)
 `,
@@ -59,10 +59,10 @@ var startCmd = &cobra.Command{
 		// Certificate is not provided, start http server
 		if certPath == "" {
 			server := &http.Server{
-				Addr: fmt.Sprintf(":%d", startPort),
+				Addr: bindAddr,
 			}
 
-			fmt.Printf("Starting HTTP server on port %d...\n", startPort)
+			fmt.Printf("Starting HTTP server on %s...\n", bindAddr)
 			log.Fatal(server.ListenAndServe())
 			return nil
 		}
@@ -95,9 +95,10 @@ var startCmd = &cobra.Command{
 
 		cfg := &tls.Config{Certificates: []tls.Certificate{cert}}
 		server := &http.Server{
-			Addr:      fmt.Sprintf(":%d", startPort),
+			Addr:      bindAddr,
 			TLSConfig: cfg,
 		}
+		fmt.Printf("Starting HTTPS server on %s...\n", bindAddr)
 		log.Fatal(server.ListenAndServeTLS("", ""))
 		return nil
 	},
@@ -105,7 +106,7 @@ var startCmd = &cobra.Command{
 
 func init() {
 	rootCmd.AddCommand(startCmd)
-	startCmd.Flags().IntVarP(&startPort, "port", "p", 8008, "Port to start HTTP server on")
+	startCmd.Flags().StringVarP(&bindAddr, "bind", "b", "127.0.0.1:8008", "Address to bind to, e.g. <ip>:<port>")
 	startCmd.Flags().StringVarP(&certPath, "cert", "c", "", "Path to certificate file")
 }
 
