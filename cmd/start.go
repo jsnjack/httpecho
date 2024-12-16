@@ -63,7 +63,7 @@ var startCmd = &cobra.Command{
 	status - return the response with specified status code (?status=200)
 	size - on top of headers, add data of specific size to response body. Supported units are "KB", "MB", "GB" (?size=200KB)
 	header - add additional header to response (?header=Content-Type:text/plain)
-	log - log request to stdout (?log=true)
+	verbose - log full request to stdout (?verbose=true)
 `,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		cmd.SilenceErrors = true
@@ -134,15 +134,15 @@ func requestHandle(w http.ResponseWriter, r *http.Request) {
 	// Handle special flags
 
 	// Log request
-	logStr := r.FormValue("log")
-	logBool := false
-	if logStr != "" {
-		logBool, err = strconv.ParseBool(logStr)
+	requestVerboseFlag := r.FormValue("verbose")
+	shouldLogRequests := false
+	if requestVerboseFlag != "" {
+		shouldLogRequests, err = strconv.ParseBool(requestVerboseFlag)
 		if err != nil {
-			logBool = false
+			shouldLogRequests = false
 		}
 	}
-	if logBool {
+	if shouldLogRequests {
 		data, err := httputil.DumpRequest(r, false)
 		if err != nil {
 			logger.Println("Failed to dump request:", err)
@@ -216,7 +216,7 @@ func requestHandle(w http.ResponseWriter, r *http.Request) {
 
 	defer func() {
 		duration := time.Since(startTime)
-		if logBool {
+		if shouldLogRequests {
 			logger.Printf("took %s\n", duration)
 		} else {
 			logger.Printf("%s %s [took %s]\n", r.Method, r.URL, duration)
