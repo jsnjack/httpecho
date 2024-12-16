@@ -125,7 +125,7 @@ func init() {
 func requestHandle(w http.ResponseWriter, r *http.Request) {
 	startTime := time.Now()
 	logID := generateRandomString(5)
-	logger := log.New(os.Stdout, "["+logID+"] ", log.Lmicroseconds)
+	logger := log.New(os.Stdout, "["+logID+"] ", 0)
 	var err error
 
 	// Handle special flags
@@ -144,9 +144,12 @@ func requestHandle(w http.ResponseWriter, r *http.Request) {
 		if err != nil {
 			logger.Println("Failed to dump request:", err)
 		} else {
+			color := GreenColor
 			for _, line := range strings.Split(string(data), "\r\n") {
 				if len(line) > 0 {
-					logger.Println(BlueColor + line + ResetColor)
+					logger.Println(color + line + ResetColor)
+				} else {
+					color = YellowColor
 				}
 			}
 		}
@@ -197,7 +200,11 @@ func requestHandle(w http.ResponseWriter, r *http.Request) {
 
 	defer func() {
 		duration := time.Since(startTime)
-		logger.Printf("%s %s [took %s]\n", r.Method, r.URL, duration)
+		if logBool {
+			logger.Printf("took %s\n", duration)
+		} else {
+			logger.Printf("%s %s [took %s]\n", r.Method, r.URL, duration)
+		}
 	}()
 }
 
