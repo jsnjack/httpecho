@@ -16,15 +16,18 @@ limitations under the License.
 package cmd
 
 import (
+	"bytes"
 	"crypto"
 	"crypto/ecdsa"
 	"crypto/ed25519"
 	"crypto/rsa"
 	"crypto/tls"
 	"crypto/x509"
+	"encoding/json"
 	"encoding/pem"
 	"errors"
 	"fmt"
+	"io"
 	"log"
 	"math/rand"
 	"net/http"
@@ -125,7 +128,7 @@ func init() {
 func requestHandle(w http.ResponseWriter, r *http.Request) {
 	startTime := time.Now()
 	logID := generateRandomString(5)
-	logger := log.New(os.Stdout, "["+logID+"] ", 0)
+	logger := log.New(os.Stdout, "["+logID+"] ", log.Lmicroseconds)
 	var err error
 
 	// Handle special flags
@@ -140,16 +143,29 @@ func requestHandle(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	if logBool {
-		data, err := httputil.DumpRequest(r, true)
+		data, err := httputil.DumpRequest(r, false)
 		if err != nil {
 			logger.Println("Failed to dump request:", err)
 		} else {
-			color := GreenColor
-			for _, line := range strings.Split(string(data), "\r\n") {
-				if len(line) > 0 {
-					logger.Println(color + line + ResetColor)
-				} else {
-					color = YellowColor
+			// Print request, except body
+			printByLine(string(data), GreenColor, "\r\n", logger)
+			// Handle body separately
+			body, err := io.ReadAll(r.Body)
+			if err != nil {
+				logger.Println("Failed to read request body:", err)
+			} else {
+				r.Body = io.NopCloser(bytes.NewBuffer(body)) // Reset the body for further use
+				switch r.Header.Get("Content-Type") {
+				case "application/json":
+					var prettyJSON bytes.Buffer
+					err = json.Indent(&prettyJSON, body, "", "  ")
+					if err == nil {
+						printByLine(prettyJSON.String(), YellowColor, "\n", logger)
+					} else {
+						printByLine(string(body), YellowColor, "", logger)
+					}
+				default:
+					printByLine(string(body), YellowColor, "", logger)
 				}
 			}
 		}
@@ -342,4 +358,17 @@ func parseHeader(data string) (string, string) {
 		return "", ""
 	}
 	return parts[0], parts[1]
+}
+
+func printByLine(data string, color string, separator string, logger *log.Logger) {
+	if separator == "" {
+		logger.Println(color + data + ResetColor)
+		return
+	}
+
+	for _, line := range strings.Split(data, separator) {
+		if len(line) != 0 {
+			logger.Println(color + line + ResetColor)
+		}
+	}
 }
