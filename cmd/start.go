@@ -29,6 +29,7 @@ import (
 	"log"
 	"math/rand"
 	"net/http"
+	"net/http/httputil"
 	"os"
 	"strconv"
 	"strings"
@@ -40,6 +41,17 @@ import (
 var bindAddr string
 var certPath string
 
+const ResetColor = "\033[0m"
+const RedColor = "\033[31m"
+const GreenColor = "\033[32m"
+const YellowColor = "\033[33m"
+const BlueColor = "\033[34m"
+const PurpleColor = "\033[35m"
+const CyanColor = "\033[36m"
+const GrayColor = "\033[37m"
+const WhiteColor = "\033[97m"
+const CrossedColor = "\033[9m"
+
 // startCmd represents the start command
 var startCmd = &cobra.Command{
 	Use:   "start",
@@ -49,6 +61,7 @@ var startCmd = &cobra.Command{
 	status - return the response with specified status code (?status=200)
 	size - on top of headers, add data of specific size to response body. Supported units are "KB", "MB", "GB" (?size=200KB)
 	header - add additional header to response (?header=Content-Type:text/plain)
+	log - log request to stdout (?log=true)
 `,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		cmd.SilenceErrors = true
@@ -114,8 +127,31 @@ func requestHandle(w http.ResponseWriter, r *http.Request) {
 	startTime := time.Now()
 	logID := generateRandomString(5)
 	logger := log.New(os.Stdout, "["+logID+"] ", log.Lmicroseconds)
+	var err error
 
 	// Handle special flags
+
+	// Log request
+	logStr := r.FormValue("log")
+	logBool := false
+	if logStr != "" {
+		logBool, err = strconv.ParseBool(logStr)
+		if err != nil {
+			logBool = false
+		}
+	}
+	if logBool {
+		data, err := httputil.DumpRequest(r, true)
+		if err != nil {
+			logger.Println("Failed to dump request:", err)
+		} else {
+			for _, line := range strings.Split(string(data), "\r\n") {
+				if len(line) > 0 {
+					logger.Println(BlueColor + line + ResetColor)
+				}
+			}
+		}
+	}
 
 	// Status code
 	statusStr := r.FormValue("status")
