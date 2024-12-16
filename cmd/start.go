@@ -25,7 +25,6 @@ import (
 	"encoding/pem"
 	"errors"
 	"fmt"
-	"io/ioutil"
 	"log"
 	"math/rand"
 	"net/http"
@@ -258,7 +257,7 @@ func extractCerts(data []byte) ([]*x509.Certificate, error) {
 		format := "%+19s: %s\n"
 		fmt.Printf(format, "found certificate", item.Subject)
 		fmt.Printf(format, "issuer", item.Issuer)
-		fmt.Printf(format, "expires in", fmt.Sprintf("%.0f days\n", item.NotAfter.Sub(time.Now()).Hours()/24))
+		fmt.Printf(format, "expires in", fmt.Sprintf("%.0f days\n", time.Until(item.NotAfter).Hours()/24))
 
 		if item.NotAfter.Before(time.Now()) {
 			return nil, fmt.Errorf("the certificate has expired on %v", item.NotAfter)
@@ -320,7 +319,7 @@ func readCert(filename string) ([]byte, error) {
 	}
 	_, err := os.Stat(filename)
 	if err == nil {
-		data, err = ioutil.ReadFile(filename)
+		data, err = os.ReadFile(filename)
 		if err != nil {
 			return nil, err
 		}
