@@ -4,6 +4,8 @@
 
 `httpecho` is an HTTP echo server that allows you to test various HTTP request and response behaviors. It supports several query parameters to adjust the response behavior.
 
+By default, it returns the request headers in the response. The order and case of the headers are preserved.
+
 ## Installation
 ```sh
 grm install jsnjack/httpecho
