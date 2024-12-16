@@ -27,17 +27,15 @@ import (
 	"encoding/pem"
 	"errors"
 	"fmt"
-	"io"
 	"log"
 	"math/rand"
-	"net/http"
-	"net/http/httputil"
 	"os"
 	"strconv"
 	"strings"
 	"time"
 
 	"github.com/spf13/cobra"
+	"github.com/valyala/fasthttp"
 )
 
 var bindAddr string
@@ -69,21 +67,18 @@ var startCmd = &cobra.Command{
 		cmd.SilenceErrors = true
 		cmd.SilenceUsage = true
 
-		http.HandleFunc("/", requestHandle)
+		requestHandler := func(ctx *fasthttp.RequestCtx) {
+			requestHandle(ctx)
+		}
 
 		// Certificate is not provided, start http server
 		if certPath == "" {
-			server := &http.Server{
-				Addr: bindAddr,
-			}
-
 			fmt.Printf("Starting HTTP server on %s...\n", bindAddr)
-			log.Fatal(server.ListenAndServe())
+			log.Fatal(fasthttp.ListenAndServe(bindAddr, requestHandler))
 			return nil
 		}
 
-		//Start https server
-
+		// Start https server
 		data, err := readCert(certPath)
 		if err != nil {
 			return err
@@ -109,12 +104,12 @@ var startCmd = &cobra.Command{
 		cert.PrivateKey = privKey
 
 		cfg := &tls.Config{Certificates: []tls.Certificate{cert}}
-		server := &http.Server{
-			Addr:      bindAddr,
+		fmt.Printf("Starting HTTPS server on %s...\n", bindAddr)
+		server := &fasthttp.Server{
+			Handler:   requestHandler,
 			TLSConfig: cfg,
 		}
-		fmt.Printf("Starting HTTPS server on %s...\n", bindAddr)
-		log.Fatal(server.ListenAndServeTLS("", ""))
+		log.Fatal(server.ListenAndServeTLS(bindAddr, "", ""))
 		return nil
 	},
 }
@@ -125,93 +120,82 @@ func init() {
 	startCmd.Flags().StringVarP(&certPath, "cert", "c", "", "Path to certificate file")
 }
 
-func requestHandle(w http.ResponseWriter, r *http.Request) {
+func requestHandle(ctx *fasthttp.RequestCtx) {
 	startTime := time.Now()
 	logID := generateRandomString(5)
 	logger := log.New(os.Stdout, "["+logID+"] ", log.Lmicroseconds)
 	var err error
 
-	// Handle special flags
+	// Extract query parameters
+	requestVerboseStr := string(ctx.QueryArgs().Peek("verbose"))
+	statusStr := string(ctx.QueryArgs().Peek("status"))
+	sleepStr := string(ctx.QueryArgs().Peek("sleep"))
+	sizeStr := string(ctx.QueryArgs().Peek("size"))
 
 	// Log request
-	requestVerboseFlag := r.FormValue("verbose")
 	shouldLogRequests := false
-	if requestVerboseFlag != "" {
-		shouldLogRequests, err = strconv.ParseBool(requestVerboseFlag)
+	if requestVerboseStr != "" {
+		shouldLogRequests, err = strconv.ParseBool(requestVerboseStr)
 		if err != nil {
 			shouldLogRequests = false
 		}
 	}
 	if shouldLogRequests {
-		data, err := httputil.DumpRequest(r, false)
-		if err != nil {
-			logger.Println("Failed to dump request:", err)
-		} else {
-			// Print request, except body
-			printByLine(string(data), GreenColor, "\r\n", logger)
-			// Handle body separately
-			body, err := io.ReadAll(r.Body)
-			if err != nil {
-				logger.Println("Failed to read request body:", err)
+		requestLine := fmt.Sprintf("%s %s %s", ctx.Method(), ctx.RequestURI(), ctx.Request.Header.Protocol())
+		printByLine(requestLine, GreenColor, "", logger)
+		data := string(ctx.Request.Header.RawHeaders())
+		printByLine(data, GreenColor, "\r\n", logger)
+		body := ctx.Request.Body()
+		switch string(ctx.Request.Header.ContentType()) {
+		case "application/json":
+			var prettyJSON bytes.Buffer
+			err = json.Indent(&prettyJSON, body, "", "  ")
+			if err == nil {
+				printByLine(prettyJSON.String(), YellowColor, "\n", logger)
 			} else {
-				r.Body = io.NopCloser(bytes.NewBuffer(body)) // Reset the body for further use
-				switch r.Header.Get("Content-Type") {
-				case "application/json":
-					var prettyJSON bytes.Buffer
-					err = json.Indent(&prettyJSON, body, "", "  ")
-					if err == nil {
-						printByLine(prettyJSON.String(), YellowColor, "\n", logger)
-					} else {
-						printByLine(string(body), YellowColor, "", logger)
-					}
-				default:
-					printByLine(string(body), YellowColor, "", logger)
-				}
+				printByLine(string(body), YellowColor, "", logger)
 			}
+		default:
+			printByLine(string(body), YellowColor, "", logger)
 		}
 	}
 
 	// Status code
-	statusStr := r.FormValue("status")
 	status, err := strconv.Atoi(statusStr)
 	if err == nil {
-		w.WriteHeader(status)
+		ctx.SetStatusCode(status)
 	}
 
 	// Add extra headers
-	err = r.ParseForm()
-	if err == nil {
-		for k, v := range r.Form {
-			if k == "header" {
-				for _, h := range v {
-					headerKey, headerValue := parseHeader(h)
-					if headerKey != "" {
-						w.Header().Set(headerKey, headerValue)
-					}
-				}
+	ctx.QueryArgs().VisitAll(func(k, v []byte) {
+		if string(k) == "header" {
+			headerKey, headerValue := parseHeader(string(v))
+			if headerKey != "" {
+				ctx.Response.Header.Set(headerKey, headerValue)
 			}
+		}
+	})
+
+	// Delay response
+	if sleepStr != "" {
+		logger.Printf("sleeping for %s\n", sleepStr)
+		sleep, err := time.ParseDuration(sleepStr)
+		if err == nil {
+			time.Sleep(sleep)
 		}
 	}
 
-	// Delay response
-	sleepStr := r.FormValue("sleep")
-	sleep, err := time.ParseDuration(sleepStr)
-	if err == nil {
-		time.Sleep(sleep)
-	}
-
 	// Add all request headers to response body
-	w.Header().Set("Content-Type", "text/plain")
-	w.Header().Set("Access-Control-Allow-Origin", "*")
-	for k, v := range r.Header {
-		w.Write([]byte(fmt.Sprintf("%s: %s\n", k, strings.Join(v, ","))))
-	}
+	ctx.Response.Header.Set("Content-Type", "text/plain")
+	ctx.Response.Header.Set("Access-Control-Allow-Origin", "*")
+	ctx.Write(ctx.Request.Header.RawHeaders())
 
 	// Generate extra body content
-	sizeStr := r.FormValue("size")
-	data, err := generatePayload(sizeStr)
-	if err == nil {
-		w.Write(data)
+	if sizeStr != "" {
+		data, err := generatePayload(sizeStr)
+		if err == nil {
+			ctx.Write(data)
+		}
 	}
 
 	defer func() {
@@ -219,7 +203,7 @@ func requestHandle(w http.ResponseWriter, r *http.Request) {
 		if shouldLogRequests {
 			logger.Printf("took %s\n", duration)
 		} else {
-			logger.Printf("%s %s [took %s]\n", r.Method, r.URL, duration)
+			logger.Printf("%s %s [took %s]\n", ctx.Method(), ctx.URI(), duration)
 		}
 	}()
 }
