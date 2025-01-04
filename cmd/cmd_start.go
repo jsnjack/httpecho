@@ -18,10 +18,13 @@ package cmd
 import (
 	"bytes"
 	"crypto/tls"
+	"embed"
 	"encoding/json"
 	"fmt"
+	"html/template"
 	"log"
 	"os"
+	"strings"
 	"time"
 
 	"github.com/spf13/cobra"
@@ -30,6 +33,12 @@ import (
 
 var bindAddr string
 var certPath string
+
+//go:embed templates/*
+var TemplatesStorage embed.FS
+
+//go:embed static/*
+var StaticStorage embed.FS
 
 // startCmd represents the start command
 var startCmd = &cobra.Command{
@@ -105,7 +114,29 @@ func requestHandle(ctx *fasthttp.RequestCtx) {
 	logger := log.New(os.Stdout, "["+logID+"] ", log.Lmicroseconds)
 	var err error
 
-	echoReq, err := NewEchoRequest(ctx.QueryArgs())
+	ctx.Response.Header.Set("Server", "httpecho")
+	ctx.Response.Header.Set("Access-Control-Allow-Origin", "*")
+
+	defer func() {
+		duration := time.Since(startTime)
+		logger.Printf("%s %s [took %s]\n", ctx.Method(), ctx.URI(), duration)
+	}()
+
+	// Handle requests to static files
+	if strings.HasPrefix(string(ctx.Path()), "/static/") {
+		content, err := StaticStorage.ReadFile(string(ctx.Path())[1:])
+		if err == nil {
+			ctx.SetContentType("text/css")
+			ctx.SetStatusCode(fasthttp.StatusOK)
+			ctx.Response.Header.Set("Cache-Control", "public, max-age=31536000")
+			ctx.Write(content)
+			return
+		} else {
+			logger.Printf("error: %s\n", err)
+		}
+	}
+
+	echoReq, err := NewEchoRequest(ctx.QueryArgs(), &ctx.Request.Header)
 	if err != nil {
 		logger.Printf("error: %s\n", err)
 		ctx.SetStatusCode(fasthttp.StatusBadRequest)
@@ -132,43 +163,71 @@ func requestHandle(ctx *fasthttp.RequestCtx) {
 		}
 	}
 
+	// Sleep
+	if echoReq.Sleep > 0 {
+		time.Sleep(echoReq.Sleep)
+	}
+
 	// Status code
 	ctx.SetStatusCode(echoReq.ResponseStatusCode)
-
-	// Set default response headers
-	ctx.Response.Header.Set("Content-Type", "text/plain")
-	ctx.Response.Header.Set("Access-Control-Allow-Origin", "*")
-	ctx.Response.Header.Set("Server", "httpecho")
 
 	// Add extra headers provided in query parameters
 	for key, value := range echoReq.ResponseHeaders {
 		ctx.Response.Header.Set(key, value)
 	}
 
-	// Add all request headers to response body
 	rawHeaders := ctx.Request.Header.RawHeaders()
-	ctx.Write(rawHeaders)
 
-	// Add dummy payload to response body
+	// Generate dummy payload to response body
+	dummyPayload := make([]byte, 0)
 	if echoReq.ResponseBodySize > 0 && echoReq.ResponseBodySize > len(rawHeaders) {
-		payload := make([]byte, echoReq.ResponseBodySize-len(rawHeaders))
-		for i := range payload {
-			payload[i] = 'a'
+		dummyPayload = make([]byte, echoReq.ResponseBodySize-len(rawHeaders))
+		for i := range dummyPayload {
+			dummyPayload[i] = 'a'
 		}
-		ctx.Write(payload)
 	}
 
-	// Sleep
-	if echoReq.Sleep > 0 {
-		time.Sleep(echoReq.Sleep)
-	}
+	// In case of HTML mode, assume that the request is coming from a browser and
+	// make the response more browser-friendly
+	if echoReq.HTMLMode {
+		ctx.Response.Header.Set("Content-Type", "text/html")
 
-	defer func() {
-		duration := time.Since(startTime)
-		if echoReq.VerboseLoggingToStdout {
-			logger.Printf("took %s\n", duration)
-		} else {
-			logger.Printf("%s %s [took %s]\n", ctx.Method(), ctx.URI(), duration)
+		// Read the template content
+		tmplContent, err := TemplatesStorage.ReadFile("templates/echo.html.tpl")
+		if err != nil {
+			logger.Printf("error: %s\n", err)
+			ctx.SetStatusCode(fasthttp.StatusInternalServerError)
+			ctx.Write([]byte(err.Error()))
+			return
 		}
-	}()
+
+		// Parse the template content
+		tmpl, err := template.New("template").Parse(string(tmplContent))
+		if err != nil {
+			logger.Printf("error: %s\n", err)
+			ctx.SetStatusCode(fasthttp.StatusInternalServerError)
+			ctx.Write([]byte(err.Error()))
+			return
+		}
+
+		// Render the template with the provided data
+		err = tmpl.Execute(ctx, map[string]interface{}{
+			"rawHeaders":   string(rawHeaders),
+			"dummyPayload": string(dummyPayload),
+		})
+		if err != nil {
+			logger.Printf("error: %s\n", err)
+			ctx.SetStatusCode(fasthttp.StatusInternalServerError)
+			ctx.Write([]byte(err.Error()))
+			return
+		}
+	} else {
+		ctx.Response.Header.Set("Content-Type", "text/plain")
+
+		// Add all request headers to response body
+		ctx.Write(rawHeaders)
+
+		// Add dummy payload to response body
+		ctx.Write(dummyPayload)
+	}
 }

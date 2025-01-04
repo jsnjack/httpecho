@@ -13,12 +13,13 @@ import (
 type EchoRequest struct {
 	Sleep                  time.Duration // Sleep duration before responding
 	ResponseStatusCode     int           // Status code to return, by default 200
-	ResponseBodySize       int           // Size of response body in bytes
+	ResponseBodySize       int           // Total size of response body, bytes
 	ResponseHeaders        map[string]string
 	VerboseLoggingToStdout bool
+	HTMLMode               bool // If true, response will be in HTML format, browser optimized, otherwise plain text
 }
 
-func NewEchoRequest(qp *fasthttp.Args) (*EchoRequest, error) {
+func NewEchoRequest(qp *fasthttp.Args, rh *fasthttp.RequestHeader) (*EchoRequest, error) {
 	req := EchoRequest{}
 
 	// Parse query parameters
@@ -86,6 +87,13 @@ func NewEchoRequest(qp *fasthttp.Args) (*EchoRequest, error) {
 		}
 		req.ResponseHeaders[key] = value
 	}
+
+	// Check if user agent accepts html
+	rh.VisitAll(func(key, value []byte) {
+		if strings.EqualFold(string(key), "Accept") && strings.Contains(string(value), "text/html") {
+			req.HTMLMode = true
+		}
+	})
 
 	return &req, nil
 
