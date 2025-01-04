@@ -22,7 +22,6 @@ import (
 	"fmt"
 	"log"
 	"os"
-	"strconv"
 	"time"
 
 	"github.com/spf13/cobra"
@@ -106,21 +105,14 @@ func requestHandle(ctx *fasthttp.RequestCtx) {
 	logger := log.New(os.Stdout, "["+logID+"] ", log.Lmicroseconds)
 	var err error
 
-	// Extract query parameters
-	requestVerboseStr := string(ctx.QueryArgs().Peek("verbose"))
-	statusStr := string(ctx.QueryArgs().Peek("status"))
-	sleepStr := string(ctx.QueryArgs().Peek("sleep"))
-	sizeStr := string(ctx.QueryArgs().Peek("size"))
-
-	// Log request
-	shouldLogRequests := false
-	if requestVerboseStr != "" {
-		shouldLogRequests, err = strconv.ParseBool(requestVerboseStr)
-		if err != nil {
-			shouldLogRequests = false
-		}
+	echoReq, err := NewEchoRequest(ctx.QueryArgs())
+	if err != nil {
+		logger.Printf("error: %s\n", err)
+		ctx.SetStatusCode(fasthttp.StatusBadRequest)
+		return
 	}
-	if shouldLogRequests {
+
+	if echoReq.VerboseLoggingToStdout {
 		requestLine := fmt.Sprintf("%s %s %s", ctx.Method(), ctx.RequestURI(), ctx.Request.Header.Protocol())
 		PrintByLine(requestLine, GreenColor, "", logger)
 		data := string(ctx.Request.Header.RawHeaders())
@@ -141,46 +133,38 @@ func requestHandle(ctx *fasthttp.RequestCtx) {
 	}
 
 	// Status code
-	status, err := strconv.Atoi(statusStr)
-	if err == nil {
-		ctx.SetStatusCode(status)
-	}
+	ctx.SetStatusCode(echoReq.ResponseStatusCode)
 
-	// Add extra headers
-	ctx.QueryArgs().VisitAll(func(k, v []byte) {
-		if string(k) == "header" {
-			headerKey, headerValue := ParseHeader(string(v))
-			if headerKey != "" {
-				ctx.Response.Header.Set(headerKey, headerValue)
-			}
-		}
-	})
+	// Set default response headers
+	ctx.Response.Header.Set("Content-Type", "text/plain")
+	ctx.Response.Header.Set("Access-Control-Allow-Origin", "*")
 
-	// Delay response
-	if sleepStr != "" {
-		logger.Printf("sleeping for %s\n", sleepStr)
-		sleep, err := time.ParseDuration(sleepStr)
-		if err == nil {
-			time.Sleep(sleep)
-		}
+	// Add extra headers provided in query parameters
+	for key, value := range echoReq.ResponseHeaders {
+		ctx.Response.Header.Set(key, value)
 	}
 
 	// Add all request headers to response body
-	ctx.Response.Header.Set("Content-Type", "text/plain")
-	ctx.Response.Header.Set("Access-Control-Allow-Origin", "*")
-	ctx.Write(ctx.Request.Header.RawHeaders())
+	rawHeaders := ctx.Request.Header.RawHeaders()
+	ctx.Write(rawHeaders)
 
-	// Generate extra body content
-	if sizeStr != "" {
-		data, err := GenerateDummyPayload(sizeStr)
-		if err == nil {
-			ctx.Write(data)
+	// Add dummy payload to response body
+	if echoReq.ResponseBodySize > 0 && echoReq.ResponseBodySize > len(rawHeaders) {
+		payload := make([]byte, echoReq.ResponseBodySize-len(rawHeaders))
+		for i := range payload {
+			payload[i] = 'a'
 		}
+		ctx.Write(payload)
+	}
+
+	// Sleep
+	if echoReq.Sleep > 0 {
+		time.Sleep(echoReq.Sleep)
 	}
 
 	defer func() {
 		duration := time.Since(startTime)
-		if shouldLogRequests {
+		if echoReq.VerboseLoggingToStdout {
 			logger.Printf("took %s\n", duration)
 		} else {
 			logger.Printf("%s %s [took %s]\n", ctx.Method(), ctx.URI(), duration)

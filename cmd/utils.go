@@ -1,10 +1,8 @@
 package cmd
 
 import (
-	"fmt"
 	"log"
 	"math/rand"
-	"strconv"
 	"strings"
 )
 
@@ -17,33 +15,6 @@ func GenerateRandomString(n int) string {
 		b[i] = letterBytes[rand.Intn(len(letterBytes))]
 	}
 	return string(b)
-}
-
-// GenerateDummyPayload generates dummy payload of requested size
-func GenerateDummyPayload(sizeStr string) ([]byte, error) {
-	if sizeStr == "" || len(sizeStr) < 3 {
-		return nil, fmt.Errorf("bad size")
-	}
-	size, err := strconv.ParseFloat(sizeStr[:len(sizeStr)-2], 64)
-	if err != nil {
-		return nil, err
-	}
-
-	unit := sizeStr[len(sizeStr)-2:]
-	switch strings.ToUpper(unit) {
-	case "KB":
-		size *= 1024
-	case "MB":
-		size *= 1024 * 1024
-	case "GB":
-		size *= 1024 * 1024 * 1024
-	}
-
-	payload := make([]byte, int(size))
-	for i := range payload {
-		payload[i] = 'a'
-	}
-	return payload, nil
 }
 
 // ParseHeader parses header in form of key:value
