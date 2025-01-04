@@ -138,6 +138,7 @@ func requestHandle(ctx *fasthttp.RequestCtx) {
 	// Set default response headers
 	ctx.Response.Header.Set("Content-Type", "text/plain")
 	ctx.Response.Header.Set("Access-Control-Allow-Origin", "*")
+	ctx.Response.Header.Set("Server", "httpecho")
 
 	// Add extra headers provided in query parameters
 	for key, value := range echoReq.ResponseHeaders {
