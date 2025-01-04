@@ -7,7 +7,9 @@
 <body>
     <main>
         <h1>echo</h1>
-        <p>{{.rawHeaders}}</p>
+            {{range $element := .rawHeaders}}
+                <p>{{$element}}</p>
+            {{end}}
     </main>
 </body>
 </html>

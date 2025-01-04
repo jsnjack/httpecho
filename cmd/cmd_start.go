@@ -212,7 +212,7 @@ func requestHandle(ctx *fasthttp.RequestCtx) {
 
 		// Render the template with the provided data
 		err = tmpl.Execute(ctx, map[string]interface{}{
-			"rawHeaders":   string(rawHeaders),
+			"rawHeaders":   strings.Split(string(rawHeaders), "\r\n"),
 			"dummyPayload": string(dummyPayload),
 		})
 		if err != nil {
