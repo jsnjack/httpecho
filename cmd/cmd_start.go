@@ -27,16 +27,21 @@ import (
 
 	"github.com/spf13/cobra"
 	"github.com/valyala/fasthttp"
+	bolt "go.etcd.io/bbolt"
 )
 
 var bindAddr string
 var certPath string
+var dbFilename string
 
 //go:embed templates/*
 var TemplatesStorage embed.FS
 
 //go:embed static/*
 var StaticStorage embed.FS
+
+// DB is the Bolt db
+var DB *bolt.DB
 
 // startCmd represents the start command
 var startCmd = &cobra.Command{
@@ -52,6 +57,21 @@ var startCmd = &cobra.Command{
 	RunE: func(cmd *cobra.Command, args []string) error {
 		cmd.SilenceErrors = true
 		cmd.SilenceUsage = true
+
+		var err error
+		DB, err = bolt.Open(dbFilename, 0644, nil)
+		if err != nil {
+			log.Fatal(err)
+		}
+		defer DB.Close()
+
+		err = DB.Update(func(tx *bolt.Tx) error {
+			_, err := tx.CreateBucketIfNotExists(StorageBucket)
+			return err
+		})
+		if err != nil {
+			log.Fatal(err)
+		}
 
 		requestHandler := func(ctx *fasthttp.RequestCtx) {
 			requestHandle(ctx)
@@ -102,8 +122,9 @@ var startCmd = &cobra.Command{
 
 func init() {
 	rootCmd.AddCommand(startCmd)
-	startCmd.Flags().StringVarP(&bindAddr, "bind", "b", "127.0.0.1:8008", "Address to bind to, e.g. <ip>:<port>")
-	startCmd.Flags().StringVarP(&certPath, "cert", "c", "", "Path to certificate file")
+	startCmd.Flags().StringVarP(&bindAddr, "bind", "b", "127.0.0.1:8008", "address to bind to, e.g. <ip>:<port>")
+	startCmd.Flags().StringVarP(&certPath, "cert", "c", "", "path to certificate file")
+	startCmd.Flags().StringVarP(&dbFilename, "db", "d", "httpecho.db", "path to database file")
 }
 
 func requestHandle(ctx *fasthttp.RequestCtx) {
