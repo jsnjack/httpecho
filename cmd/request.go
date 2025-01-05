@@ -112,6 +112,10 @@ func (dr *DumpedRequest) String() string {
 	return fmt.Sprintf("%s\r\n%s\r\n%s", dr.RequestLine, dr.Headers, dr.Body)
 }
 
+func (dr *DumpedRequest) Bytes() []byte {
+	return []byte(dr.String())
+}
+
 func (dr *DumpedRequest) LogWithColours(logger *log.Logger) {
 	PrintByLine(dr.RequestLine, GreenColor, "", logger)
 	PrintByLine(dr.Headers, GreenColor, "\r\n", logger)
