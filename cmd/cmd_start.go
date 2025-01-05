@@ -112,6 +112,7 @@ func requestHandle(ctx *fasthttp.RequestCtx) {
 	logger := log.New(os.Stdout, "["+logID+"] ", log.Lmicroseconds)
 	var err error
 
+	// Set default headers
 	ctx.Response.Header.Set("Server", "httpecho")
 	ctx.Response.Header.Set("Access-Control-Allow-Origin", "*")
 
@@ -134,6 +135,7 @@ func requestHandle(ctx *fasthttp.RequestCtx) {
 		}
 	}
 
+	// Parse query paramaters
 	echoReq, err := NewEchoRequest(ctx.QueryArgs(), &ctx.Request.Header)
 	if err != nil {
 		logger.Printf("error: %s\n", err)
@@ -141,8 +143,9 @@ func requestHandle(ctx *fasthttp.RequestCtx) {
 		return
 	}
 
+	// Dump the incoming request
+	dumpedRequest := NewDumpedRequest(ctx)
 	if echoReq.VerboseLoggingToStdout {
-		dumpedRequest := NewDumpedRequest(ctx)
 		dumpedRequest.LogWithColours(logger)
 	}
 
@@ -159,12 +162,12 @@ func requestHandle(ctx *fasthttp.RequestCtx) {
 		ctx.Response.Header.Set(key, value)
 	}
 
-	rawHeaders := ctx.Request.Header.RawHeaders()
+	rawHeadersLen := len(ctx.Request.Header.RawHeaders())
 
 	// Generate dummy payload to response body
 	dummyPayload := make([]byte, 0)
-	if echoReq.ResponseBodySize > 0 && echoReq.ResponseBodySize > len(rawHeaders) {
-		dummyPayload = make([]byte, echoReq.ResponseBodySize-len(rawHeaders))
+	if echoReq.ResponseBodySize > 0 && echoReq.ResponseBodySize > rawHeadersLen {
+		dummyPayload = make([]byte, echoReq.ResponseBodySize-rawHeadersLen)
 		for i := range dummyPayload {
 			dummyPayload[i] = 'a'
 		}
@@ -195,8 +198,8 @@ func requestHandle(ctx *fasthttp.RequestCtx) {
 
 		// Render the template with the provided data
 		err = tmpl.Execute(ctx, map[string]interface{}{
-			"rawHeaders":   strings.Split(string(rawHeaders), "\r\n"),
-			"dummyPayload": string(dummyPayload),
+			"dumpedRequest": dumpedRequest.String(),
+			"dummyPayload":  string(dummyPayload),
 		})
 		if err != nil {
 			logger.Printf("error: %s\n", err)
@@ -208,7 +211,7 @@ func requestHandle(ctx *fasthttp.RequestCtx) {
 		ctx.Response.Header.Set("Content-Type", "text/plain")
 
 		// Add all request headers to response body
-		ctx.Write(rawHeaders)
+		ctx.Write([]byte(dumpedRequest.Headers))
 
 		// Add dummy payload to response body
 		ctx.Write(dummyPayload)

@@ -12,21 +12,17 @@
             <summary><i>httpecho</i></summary>
             <p>A simple HTTP server that echoes back the request it receives. It is useful for debugging and
                 testing HTTP clients.</p>
-            <p>A single binary that can be run on any platform without any dependencies. It is written in
-                Go.
-            </p>
-            <p>Open source and available on <a href="https://github.com/jsnjack/httpecho" target="_blank">GitHub</a>.
-            </p>
             <p>The order and case of the headers are preserved.</p>
         </details>
     </header>
     <main>
         <details open>
             <summary>Request echo</summary>
-            <p></p>
-            {{range $element := .rawHeaders}}
-            <p>{{$element}}</p>
-            {{end}}
+            <code>
+<pre>
+{{.dumpedRequest}}
+</pre>
+            </code>
         </details>
         <details>
             <summary>List of supported query parameters</summary>
