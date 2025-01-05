@@ -61,7 +61,7 @@ var startCmd = &cobra.Command{
 
 		// Certificate is not provided, start http server
 		if certPath == "" {
-			fmt.Printf("Starting HTTP server on %s...\n", bindAddr)
+			fmt.Printf("Starting HTTP server on http://%s...\n", bindAddr)
 			log.Fatal(fasthttp.ListenAndServe(bindAddr, requestHandler))
 			return nil
 		}
@@ -92,7 +92,7 @@ var startCmd = &cobra.Command{
 		cert.PrivateKey = privKey
 
 		cfg := &tls.Config{Certificates: []tls.Certificate{cert}}
-		fmt.Printf("Starting HTTPS server on %s...\n", bindAddr)
+		fmt.Printf("Starting HTTPS server on https://%s...\n", bindAddr)
 		server := &fasthttp.Server{
 			Handler:   requestHandler,
 			TLSConfig: cfg,
