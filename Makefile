@@ -11,7 +11,7 @@ else
 endif
 
 start:
-	ls *.go | entr -sr "go build && ./${BINARY} start"
+	find . -name "*.go" | entr -sr "go build && ./${BINARY} start"
 
 bin/${BINARY}: bin/${BINARY}_linux_amd64
 	cp bin/${BINARY}_linux_amd64 bin/${BINARY}
