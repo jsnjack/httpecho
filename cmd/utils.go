@@ -27,6 +27,10 @@ func ParseHeader(data string) (string, string) {
 }
 
 func PrintByLine(data string, color string, separator string, logger *log.Logger) {
+	if data == "" {
+		return
+	}
+
 	if separator == "" {
 		logger.Println(color + data + ResetColor)
 		return

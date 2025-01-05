@@ -1,7 +1,10 @@
 package cmd
 
 import (
+	"bytes"
+	"encoding/json"
 	"fmt"
+	"log"
 	"strconv"
 	"strings"
 	"time"
@@ -96,5 +99,48 @@ func NewEchoRequest(qp *fasthttp.Args, rh *fasthttp.RequestHeader) (*EchoRequest
 	})
 
 	return &req, nil
+}
 
+type DumpedRequest struct {
+	RequestLine string
+	Headers     string
+	Body        string
+	prettyBody  bool
+}
+
+func (dr *DumpedRequest) String() string {
+	return fmt.Sprintf("%s\r\n%s\r\n%s", dr.RequestLine, dr.Headers, dr.Body)
+}
+
+func (dr *DumpedRequest) LogWithColours(logger *log.Logger) {
+	PrintByLine(dr.RequestLine, GreenColor, "", logger)
+	PrintByLine(dr.Headers, GreenColor, "\r\n", logger)
+	if dr.Body != "" {
+		logger.Println()
+	}
+	if dr.prettyBody {
+		PrintByLine(dr.Body, YellowColor, "\n", logger)
+	} else {
+		PrintByLine(dr.Body, YellowColor, "", logger)
+	}
+}
+
+// NewDumpedRequest creates a new DumpedRequest from fasthttp.RequestCtx
+func NewDumpedRequest(ctx *fasthttp.RequestCtx) *DumpedRequest {
+	var dr DumpedRequest
+	body := ctx.Request.Body()
+	switch string(ctx.Request.Header.ContentType()) {
+	case "application/json":
+		var prettyJSON bytes.Buffer
+		err := json.Indent(&prettyJSON, body, "", "  ")
+		if err == nil {
+			body = prettyJSON.Bytes()
+			dr.prettyBody = true
+
+		}
+	}
+	dr.RequestLine = fmt.Sprintf("%s %s %s", ctx.Method(), ctx.RequestURI(), ctx.Request.Header.Protocol())
+	dr.Headers = string(ctx.Request.Header.RawHeaders())
+	dr.Body = string(body)
+	return &dr
 }

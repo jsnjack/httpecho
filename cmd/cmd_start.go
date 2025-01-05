@@ -16,10 +16,8 @@ limitations under the License.
 package cmd
 
 import (
-	"bytes"
 	"crypto/tls"
 	"embed"
-	"encoding/json"
 	"fmt"
 	"html/template"
 	"log"
@@ -144,23 +142,8 @@ func requestHandle(ctx *fasthttp.RequestCtx) {
 	}
 
 	if echoReq.VerboseLoggingToStdout {
-		requestLine := fmt.Sprintf("%s %s %s", ctx.Method(), ctx.RequestURI(), ctx.Request.Header.Protocol())
-		PrintByLine(requestLine, GreenColor, "", logger)
-		data := string(ctx.Request.Header.RawHeaders())
-		PrintByLine(data, GreenColor, "\r\n", logger)
-		body := ctx.Request.Body()
-		switch string(ctx.Request.Header.ContentType()) {
-		case "application/json":
-			var prettyJSON bytes.Buffer
-			err = json.Indent(&prettyJSON, body, "", "  ")
-			if err == nil {
-				PrintByLine(prettyJSON.String(), YellowColor, "\n", logger)
-			} else {
-				PrintByLine(string(body), YellowColor, "", logger)
-			}
-		default:
-			PrintByLine(string(body), YellowColor, "", logger)
-		}
+		dumpedRequest := NewDumpedRequest(ctx)
+		dumpedRequest.LogWithColours(logger)
 	}
 
 	// Sleep
