@@ -10,6 +10,9 @@ else
 	$(info "Install monova (https://github.com/jsnjack/monova) to calculate version")
 endif
 
+start:
+	ls *.go | entr -sr "go build && ./${BINARY} start"
+
 bin/${BINARY}: bin/${BINARY}_linux_amd64
 	cp bin/${BINARY}_linux_amd64 bin/${BINARY}
 
