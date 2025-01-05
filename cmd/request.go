@@ -14,16 +14,30 @@ import (
 
 // EchoRequest represents a request to echo server
 type EchoRequest struct {
+	Path                   string        // Request path
 	Sleep                  time.Duration // Sleep duration before responding
 	ResponseStatusCode     int           // Status code to return, by default 200
 	ResponseBodySize       int           // Total size of response body, bytes
 	ResponseHeaders        map[string]string
 	VerboseLoggingToStdout bool
 	HTMLMode               bool // If true, response will be in HTML format, browser optimized, otherwise plain text
+	ViewMode               bool // If true, user intends to view page, no need to save it
 }
 
-func NewEchoRequest(qp *fasthttp.Args, rh *fasthttp.RequestHeader) (*EchoRequest, error) {
-	req := EchoRequest{}
+// ShouldBeRecorded returns true if request should be recorded in db
+func (er *EchoRequest) ShouldBeRecorded() bool {
+	return !er.ViewMode && strings.HasPrefix(er.Path, "/r/")
+}
+
+// IsViewRequest returns true if request is a view request for previously saved dumped requests
+func (er *EchoRequest) IsViewRequest() bool {
+	return er.ViewMode && strings.HasPrefix(er.Path, "/r/")
+}
+
+func NewEchoRequest(qp *fasthttp.Args, rh *fasthttp.RequestHeader, path string) (*EchoRequest, error) {
+	req := EchoRequest{
+		Path: path,
+	}
 
 	// Parse query parameters
 
@@ -97,6 +111,16 @@ func NewEchoRequest(qp *fasthttp.Args, rh *fasthttp.RequestHeader) (*EchoRequest
 			req.HTMLMode = true
 		}
 	})
+
+	// Check if view mode is enabled
+	viewStr := string(qp.Peek("view"))
+	if viewStr != "" {
+		view, err := strconv.ParseBool(viewStr)
+		if err != nil {
+			return nil, err
+		}
+		req.ViewMode = view
+	}
 
 	return &req, nil
 }

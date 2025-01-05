@@ -22,6 +22,7 @@ import (
 	"html/template"
 	"log"
 	"os"
+	"sort"
 	"strings"
 	"time"
 
@@ -157,7 +158,7 @@ func requestHandle(ctx *fasthttp.RequestCtx) {
 	}
 
 	// Parse query paramaters
-	echoReq, err := NewEchoRequest(ctx.QueryArgs(), &ctx.Request.Header)
+	echoReq, err := NewEchoRequest(ctx.QueryArgs(), &ctx.Request.Header, string(ctx.Path()))
 	if err != nil {
 		logger.Printf("error: %s\n", err)
 		ctx.SetStatusCode(fasthttp.StatusBadRequest)
@@ -168,6 +169,76 @@ func requestHandle(ctx *fasthttp.RequestCtx) {
 	dumpedRequest := NewDumpedRequest(ctx)
 	if echoReq.VerboseLoggingToStdout {
 		dumpedRequest.LogWithColours(logger)
+	}
+
+	// Save the request to the database
+	if echoReq.ShouldBeRecorded() {
+		reqId, err := SaveRequest(echoReq.Path, dumpedRequest.Bytes())
+		if err != nil {
+			logger.Printf("error: %s\n", err)
+			ctx.SetStatusCode(fasthttp.StatusInternalServerError)
+			ctx.Write([]byte(err.Error()))
+			return
+		}
+		logger.Printf("request saved with ID: %d\n", reqId)
+	}
+
+	// Handle view requests
+	if echoReq.IsViewRequest() && echoReq.HTMLMode {
+		savedReqMap, err := GetAllRequestForPath(echoReq.Path)
+		if err != nil {
+			logger.Printf("error: %s\n", err)
+			ctx.SetStatusCode(fasthttp.StatusInternalServerError)
+			ctx.Write([]byte(err.Error()))
+			return
+		}
+
+		ctx.Response.Header.Set("Content-Type", "text/html")
+
+		// Read the template content
+		tmplContent, err := TemplatesStorage.ReadFile("templates/view.html.tpl")
+		if err != nil {
+			logger.Printf("error: %s\n", err)
+			ctx.SetStatusCode(fasthttp.StatusInternalServerError)
+			ctx.Write([]byte(err.Error()))
+			return
+		}
+
+		// Parse the template content
+		tmpl, err := template.New("template").Parse(string(tmplContent))
+		if err != nil {
+			logger.Printf("error: %s\n", err)
+			ctx.SetStatusCode(fasthttp.StatusInternalServerError)
+			ctx.Write([]byte(err.Error()))
+			return
+		}
+		// Sort and order the requests by ID
+		var keys []uint64
+		for k := range savedReqMap {
+			keys = append(keys, k)
+		}
+		// Sort the keys
+		sort.Slice(keys, func(i, j int) bool {
+			return keys[i] > keys[j]
+		})
+		// Create a new slice with sorted requests
+		sortedReqSlice := make([][]string, 0)
+		for _, k := range keys {
+			newEl := []string{fmt.Sprintf("%d", k), string(savedReqMap[k])}
+			sortedReqSlice = append(sortedReqSlice, newEl)
+		}
+
+		// Render the template with the provided data
+		err = tmpl.Execute(ctx, map[string]interface{}{
+			"SortedRequests": sortedReqSlice,
+		})
+		if err != nil {
+			logger.Printf("error: %s\n", err)
+			ctx.SetStatusCode(fasthttp.StatusInternalServerError)
+			ctx.Write([]byte(err.Error()))
+			return
+		}
+		return
 	}
 
 	// Sleep
@@ -228,6 +299,7 @@ func requestHandle(ctx *fasthttp.RequestCtx) {
 			ctx.Write([]byte(err.Error()))
 			return
 		}
+		return
 	} else {
 		ctx.Response.Header.Set("Content-Type", "text/plain")
 
