@@ -156,7 +156,11 @@ func (dr *DumpedRequest) LogWithColours(logger *log.Logger) {
 // NewDumpedRequest creates a new DumpedRequest from fasthttp.RequestCtx
 func NewDumpedRequest(ctx *fasthttp.RequestCtx) *DumpedRequest {
 	var dr DumpedRequest
-	body := ctx.Request.Body()
+	body, err := ctx.Request.BodyUncompressed()
+	if err != nil {
+		body = ctx.Request.Body()
+	}
+
 	switch string(ctx.Request.Header.ContentType()) {
 	case "application/json":
 		var prettyJSON bytes.Buffer
