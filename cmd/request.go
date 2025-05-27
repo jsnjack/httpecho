@@ -80,6 +80,12 @@ func NewEchoRequest(qp *fasthttp.Args, rh *fasthttp.RequestHeader, path string) 
 			size *= 1024 * 1024
 		case "GB":
 			size *= 1024 * 1024 * 1024
+		default:
+			return nil, fmt.Errorf("unsupported size unit: %s", unit)
+		}
+		// Limit max response size to 1GB
+		if size > 1*1024*1024*1024 {
+			return nil, fmt.Errorf("response size too large")
 		}
 		req.ResponseBodySize = int(size)
 	}
