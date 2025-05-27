@@ -29,11 +29,14 @@ import (
 	"github.com/spf13/cobra"
 	"github.com/valyala/fasthttp"
 	bolt "go.etcd.io/bbolt"
+	"golang.org/x/crypto/acme"
+	"golang.org/x/crypto/acme/autocert"
 )
 
 var bindAddr string
 var certPath string
 var dbFilename string
+var domain string
 
 //go:embed templates/*
 var TemplatesStorage embed.FS
@@ -78,45 +81,83 @@ var startCmd = &cobra.Command{
 			requestHandle(ctx)
 		}
 
-		// Certificate is not provided, start http server
-		if certPath == "" {
-			fmt.Printf("Starting HTTP server on http://%s...\n", bindAddr)
-			log.Fatal(fasthttp.ListenAndServe(bindAddr, requestHandler))
-			return nil
-		}
+		if domain != "" {
+			// Domain is provided, start http server on ports 80 and 443
+			certManager := autocert.Manager{
+				Prompt:     autocert.AcceptTOS,
+				Cache:      autocert.DirCache("certs"),
+				HostPolicy: autocert.HostWhitelist(domain),
+			}
+			tlsCfg := &tls.Config{
+				GetCertificate: certManager.GetCertificate,
+				MinVersion:     tls.VersionTLS12,
+				CipherSuites: []uint16{
+					tls.TLS_ECDHE_ECDSA_WITH_AES_256_GCM_SHA384,
+					tls.TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384,
+					tls.TLS_ECDHE_ECDSA_WITH_AES_128_GCM_SHA256,
+					tls.TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256,
+					tls.TLS_ECDHE_ECDSA_WITH_CHACHA20_POLY1305,
+					tls.TLS_ECDHE_RSA_WITH_CHACHA20_POLY1305,
+				},
+				NextProtos: []string{
+					"http/1.1", acme.ALPNProto,
+				},
+			}
+			go func() {
+				fmt.Println("Listening on port 80...")
+				err := fasthttp.ListenAndServe(":80", requestHandler)
+				if err != nil {
+					fmt.Printf("Error starting HTTP server: %v\n", err)
+					os.Exit(1)
+				}
+			}()
+			fmt.Println("Listening on port 443...")
+			server := &fasthttp.Server{
+				Handler:   requestHandler,
+				TLSConfig: tlsCfg,
+			}
+			log.Fatal(server.ListenAndServeTLS(":443", "", ""))
+		} else {
+			// Certificate is not provided, start http server
+			if certPath == "" {
+				fmt.Printf("Starting HTTP server on http://%s...\n", bindAddr)
+				log.Fatal(fasthttp.ListenAndServe(bindAddr, requestHandler))
+				return nil
+			}
 
-		// Start https server
-		data, err := ReadCert(certPath)
-		if err != nil {
-			return err
-		}
+			// Start https server
+			data, err := ReadCert(certPath)
+			if err != nil {
+				return err
+			}
 
-		certs, err := ExtractCerts(data)
-		if err != nil {
-			return err
-		}
-		if len(certs) == 0 {
-			return fmt.Errorf("unable to extract certificates")
-		}
+			certs, err := ExtractCerts(data)
+			if err != nil {
+				return err
+			}
+			if len(certs) == 0 {
+				return fmt.Errorf("unable to extract certificates")
+			}
 
-		privKey, err := ExtractPrivateKey(data)
-		if err != nil {
-			return err
-		}
+			privKey, err := ExtractPrivateKey(data)
+			if err != nil {
+				return err
+			}
 
-		var cert tls.Certificate
-		for _, item := range certs {
-			cert.Certificate = append(cert.Certificate, item.Raw)
-		}
-		cert.PrivateKey = privKey
+			var cert tls.Certificate
+			for _, item := range certs {
+				cert.Certificate = append(cert.Certificate, item.Raw)
+			}
+			cert.PrivateKey = privKey
 
-		cfg := &tls.Config{Certificates: []tls.Certificate{cert}}
-		fmt.Printf("Starting HTTPS server on https://%s...\n", bindAddr)
-		server := &fasthttp.Server{
-			Handler:   requestHandler,
-			TLSConfig: cfg,
+			cfg := &tls.Config{Certificates: []tls.Certificate{cert}}
+			fmt.Printf("Starting HTTPS server on https://%s...\n", bindAddr)
+			server := &fasthttp.Server{
+				Handler:   requestHandler,
+				TLSConfig: cfg,
+			}
+			log.Fatal(server.ListenAndServeTLS(bindAddr, "", ""))
 		}
-		log.Fatal(server.ListenAndServeTLS(bindAddr, "", ""))
 		return nil
 	},
 }
@@ -126,6 +167,7 @@ func init() {
 	startCmd.Flags().StringVarP(&bindAddr, "bind", "b", "127.0.0.1:8008", "address to bind to, e.g. <ip>:<port>")
 	startCmd.Flags().StringVarP(&certPath, "cert", "c", "", "path to certificate file")
 	startCmd.Flags().StringVarP(&dbFilename, "db", "d", "httpecho.db", "path to database file")
+	startCmd.Flags().StringVarP(&domain, "domain", "D", "", "domain name to use for the server, e.g. example.com. The server will start on ports 80 and 443.")
 }
 
 func requestHandle(ctx *fasthttp.RequestCtx) {
